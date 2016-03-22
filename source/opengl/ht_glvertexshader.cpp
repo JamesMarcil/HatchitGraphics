@@ -12,7 +12,7 @@
 **
 **/
 
-#include <ht_glfragshader.h>
+#include <ht_glvertexshader.h>
 #include <ht_debug.h>
 
 namespace Hatchit {
@@ -21,19 +21,19 @@ namespace Hatchit {
 
         namespace OpenGL {
 
-            GLFragShader::GLFragShader()
+            GLVertShader::GLVertShader()
             {
 
             }
 
-            GLFragShader::~GLFragShader()
+            GLVertShader::~GLVertShader()
             {
 
             }
 
-            void GLFragShader::VCompile()
+            void GLVertShader::VCompile()
             {
-                compileGL(GL_FRAGMENT_SHADER);
+                compileGL(GL_VERTEX_SHADER);
             }
         }
 	}

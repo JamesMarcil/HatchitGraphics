@@ -39,13 +39,14 @@ namespace Hatchit {
 
                 void VOnLoaded() override;
 
-		virtual void VCompile();
+		        virtual void VCompile() = 0;
 #ifdef _DEBUG
                 void LoadDirectlyFromFile(std::string path);
 #endif
 
             protected:
-                GLuint shader;
+                BYTE*  m_blob;
+                GLuint m_shader;
                 std::map<std::string, GLuint> m_uniformMap;
                 std::map<std::string, GLuint> m_textureMap;
 
