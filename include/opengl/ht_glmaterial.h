@@ -25,8 +25,8 @@
 #pragma once
 
 #include <ht_material.h>
-#include <ht_glvertshader.h>
-#include <ht_glfragshader.h>
+#include <ht_glvertexshader.h>
+#include <ht_glfragmentshader.h>
 #include <ht_glgeoshader.h>
 #include <ht_gltessshader.h>
 

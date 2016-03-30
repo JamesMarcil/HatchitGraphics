@@ -31,24 +31,6 @@ namespace Hatchit {
                 delete[] m_blob;
             }
 
-            void GLShader::VOnLoaded()
-            {
-                VCompile();
-            }
-
-            bool GLShader::VInitFromFile(Core::File* file)
-            {
-                size_t size = file->SizeBytes();
-
-                m_blob = new BYTE[size];
-                size_t length = file->Read(m_blob, size - 1);
-                m_blob[length] = '\0';
-
-                VCompile();
-
-                return true;
-            }
-
             void GLShader::printShaderLog()
             {
                 GLint logLength = 0;

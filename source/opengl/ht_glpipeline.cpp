@@ -13,6 +13,7 @@
 **/
 
 #include <ht_glpipeline.h>
+#include <ht_gl.h>
 
 namespace Hatchit
 {

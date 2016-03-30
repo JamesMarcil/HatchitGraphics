@@ -35,10 +35,6 @@ namespace Hatchit {
 
                 virtual ~GLShader();
 
-                bool VInitFromFile(Core::File* file) override;
-
-                void VOnLoaded() override;
-
 		        virtual void VCompile() = 0;
 #ifdef _DEBUG
                 void LoadDirectlyFromFile(std::string path);

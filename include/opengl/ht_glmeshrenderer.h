@@ -40,13 +40,8 @@ namespace Hatchit {
                 GLMeshRenderer(Resource::MeshPtr mesh, GLMaterial* material);
                 virtual ~GLMeshRenderer();
 
-                ///Buffer a mesh with OpenGL
-                virtual void VBuffer()		override;
-                ///Render a mesh with a OpenGL
+               ///Render a mesh with a OpenGL
                 virtual void VRender()		override;
-                ///Gree a mesh from OpenGL
-                virtual void VFree()		override;
-
             private:
                 GLuint vbo, vao, ibo;
             };
