@@ -34,16 +34,8 @@ namespace Hatchit {
                 vkDestroyPipelineLayout(device, m_pipelineLayout, nullptr);
                 vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
 
-                //vkFreeDescriptorSets(m_device, );
                 for (size_t i = 0; i < m_descriptorSetLayouts.size(); i++)
                     vkDestroyDescriptorSetLayout(device, m_descriptorSetLayouts[i], nullptr);
-
-                //Free Uniform block
-                if (!useGivenLayout) 
-                {
-                    vkDestroyBuffer(device, m_uniformVSBlock.buffer, nullptr);
-                    vkFreeMemory(device, m_uniformVSBlock.memory, nullptr);
-                }
             }
 
             //If we wanted to allow users to control blending states
@@ -250,17 +242,6 @@ namespace Hatchit {
                 if (!prepareLayouts(device))
                     return false;
 
-                if (!useGivenLayout)
-                {
-                    //TODO: Actually figure out how big this needs to be
-                    renderer->CreateBuffer(device, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(Math::Matrix4) * 2, nullptr, &m_uniformVSBlock);
-
-                    m_uniformVSBlock.descriptor.offset = 0;
-                    m_uniformVSBlock.descriptor.range = sizeof(Math::Matrix4) * 2;
-
-                    if (!prepareDescriptorSet(descriptorPool, device))
-                        return false;
-                }
 
                 if (!preparePipeline(device))
                     return false;
@@ -270,25 +251,100 @@ namespace Hatchit {
 
             bool VKPipeline::VUpdate()
             {
+                //TODO: Organize push constant data other than just matricies
                 if (m_shaderVariables.size() == 0)
                     return true;
 
-                VkDevice device = VKRenderer::RendererInstance->GetVKDevice();
+                std::vector<uint32_t>       intList;
+                std::vector<float>          floatList;
+                std::vector<Math::Vector2>  vector2List;
+                std::vector<Math::Vector3>  vector3List;
+                std::vector<Math::Vector4>  vector4List;
+                std::vector<Math::Matrix4>  matrixList;
 
-                uint8_t* pData;
-
-                std::vector<Math::Matrix4> variableList;
-
+                //Sort data into appropriate lists
                 std::map <std::string, ShaderVariable*>::iterator it;
                 for (it = m_shaderVariables.begin(); it != m_shaderVariables.end(); it++)
-                    variableList.push_back(*(Math::Matrix4*)(it->second->GetData()));
+                {
+                    ShaderVariable::Type varType = it->second->GetType();
 
-                VkResult err = vkMapMemory(device, m_uniformVSBlock.memory, 0, sizeof(m_shaderVariables), 0, (void**)&pData);
-                assert(!err);
+                    switch (varType)
+                    {
+                    case ShaderVariable::INT:
+                        intList.push_back(*(int*)(it->second->GetData()));
+                        break;
+                    case ShaderVariable::FLOAT:
+                        floatList.push_back(*(float*)(it->second->GetData()));
+                        break;
+                    case ShaderVariable::FLOAT2:
+                        vector2List.push_back(*(Math::Vector2*)(it->second->GetData()));
+                        break;
+                    case ShaderVariable::FLOAT3:
+                        vector3List.push_back(*(Math::Vector3*)(it->second->GetData()));
+                        break;
+                    case ShaderVariable::FLOAT4:
+                        vector4List.push_back(*(Math::Vector4*)(it->second->GetData()));
+                        break;
+                    case ShaderVariable::MAT4:
+                        matrixList.push_back(*(Math::Matrix4*)(it->second->GetData()));
+                        break;
+                    }
+                }
 
-                memcpy(pData, variableList.data(), sizeof(Math::Matrix4) * 2);
+                //Resize vectors to fit new push data
+                m_intPushData.clear();
+                m_intPushData.resize(intList.size());
+
+                m_floatPushData.clear();
+                m_floatPushData.resize(floatList.size());
+
+                m_vector2PushData.clear();
+                m_vector2PushData.resize(vector2List.size() * 2);
+
+                m_vector3PushData.clear();
+                m_vector3PushData.resize(vector3List.size() * 3);
+
+                m_vector4PushData.clear();
+                m_vector4PushData.resize(vector4List.size() * 4);
+
+                m_matrixPushData.clear();
+                m_matrixPushData.resize(matrixList.size() * 16);
+
+                //Copy data into variable lists
+                size_t i = 0; //reuse i
+                for (i = 0; i < intList.size(); i++)
+                {
+                    memcpy(m_intPushData.data() + i, static_cast<void*>(&intList[i]), sizeof(uint32_t));
+                }
                 
-                vkUnmapMemory(device, m_uniformVSBlock.memory);
+                for (i = 0; i < floatList.size(); i++)
+                {
+                    memcpy(m_floatPushData.data() + i, static_cast<void*>(&floatList[i]), sizeof(float));
+                }
+                
+                for (i = 0; i < vector2List.size(); i++)
+                {
+                    Math::Vector2 vec = vector2List[i];
+                    memcpy(m_vector2PushData.data() + (2 * i), static_cast<void*>(&vec[0]), sizeof(float) * 2);
+                }
+                
+                for (i = 0; i < vector3List.size(); i++)
+                {
+                    Math::Vector3 vec = vector3List[i];
+                    memcpy(m_vector3PushData.data() + (3 * i), static_cast<void*>(&vec[0]), sizeof(float) * 3);
+                }
+
+                for (i = 0; i < vector4List.size(); i++)
+                {
+                    Math::Vector4 vec = vector4List[i];
+                    memcpy(m_vector4PushData.data() + (4 * i), static_cast<void*>(&vec[0]), sizeof(float) * 4);
+                }
+                
+                for (i = 0; i < matrixList.size(); i++)
+                {
+                    Math::Matrix4 mat = matrixList[i];
+                    memcpy(m_matrixPushData.data() + (16 * i), static_cast<void*>(matrixList[i].data), sizeof(float) * 16);
+                }
 
                 return true;
             }
@@ -373,12 +429,27 @@ namespace Hatchit {
                     }
                 }
 
+                uint32_t matSize = 16 * sizeof(float);
+
+                std::vector<VkPushConstantRange> pushConstantRanges;
+                pushConstantRanges.resize(2);
+
+                pushConstantRanges[0].offset = 0;
+                pushConstantRanges[0].size = matSize;
+                pushConstantRanges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+                pushConstantRanges[1].offset = matSize;
+                pushConstantRanges[1].size = matSize;
+                pushConstantRanges[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
                 //Pipeline layout 
                 VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
                 pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
                 pipelineLayoutInfo.pNext = nullptr;
                 pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(m_descriptorSetLayouts.size());
                 pipelineLayoutInfo.pSetLayouts = m_descriptorSetLayouts.data();
+                pipelineLayoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size());
+                pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
 
                 err = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_pipelineLayout);
                 assert(!err);
@@ -389,44 +460,6 @@ namespace Hatchit {
 #endif
                     return false;
                 }
-
-                return true;
-            }
-
-            bool VKPipeline::prepareDescriptorSet(VkDescriptorPool descriptorPool, VkDevice device)
-            {
-                VkResult err;
-
-                //Setup the descriptor sets
-                VkDescriptorSetAllocateInfo allocInfo = {};
-                allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-                allocInfo.descriptorPool = descriptorPool;
-                allocInfo.descriptorSetCount = 1;
-                allocInfo.pSetLayouts = &m_descriptorSetLayouts[0];
-
-                err = vkAllocateDescriptorSets(device, &allocInfo, &m_descriptorSet);
-                assert(!err);
-                if (err != VK_SUCCESS)
-                {
-#ifdef _DEBUG
-                    Core::DebugPrintF("VKPipeline::prepareDescriptorSet: Failed to allocate descriptor set\n");
-#endif
-                    return false;
-                }
-
-                std::vector<VkWriteDescriptorSet> descSetWrites = {};
-
-                VkWriteDescriptorSet perPassVSWrite = {};
-                perPassVSWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                perPassVSWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                perPassVSWrite.dstSet = m_descriptorSet;
-                perPassVSWrite.dstBinding = 0;
-                perPassVSWrite.pBufferInfo = &m_uniformVSBlock.descriptor;
-                perPassVSWrite.descriptorCount = 1;
-
-                descSetWrites.push_back(perPassVSWrite);
-
-                vkUpdateDescriptorSets(device, static_cast<uint32_t>(descSetWrites.size()), descSetWrites.data(), 0, nullptr);
 
                 return true;
             }
@@ -561,10 +594,16 @@ namespace Hatchit {
                 return true;
             }
 
-            VkPipeline                          VKPipeline::GetVKPipeline() { return m_pipeline; }
-            VkPipelineLayout                    VKPipeline::GetVKPipelineLayout() { return m_pipelineLayout; }
+            VkPipeline                          VKPipeline::GetVKPipeline()             { return m_pipeline; }
+            VkPipelineLayout                    VKPipeline::GetVKPipelineLayout()       { return m_pipelineLayout; }
             std::vector<VkDescriptorSetLayout>  VKPipeline::GetVKDescriptorSetLayouts() { return m_descriptorSetLayouts; }
-            VkDescriptorSet*                    VKPipeline::GetVKDescriptorSet() { return &m_descriptorSet; }
+
+            void VKPipeline::SendPushConstants(VkCommandBuffer commandBuffer)
+            {
+                //Send a push for each type of data to send; vectors, matricies, ints etc.
+                uint32_t dataSize = static_cast<uint32_t>(m_matrixPushData.size() * sizeof(float));
+                vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, dataSize, m_matrixPushData.data());
+            }
         }
     }
 }
