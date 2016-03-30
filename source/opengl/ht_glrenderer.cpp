@@ -95,8 +95,8 @@ namespace Hatchit {
 
             }
 
-	    void GLRenderer::VRender(float dt)
-	    {
+            void GLRenderer::VRender(float dt)
+            {
 
             }
 
